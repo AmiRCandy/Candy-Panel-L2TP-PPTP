@@ -6,8 +6,7 @@ local io = require "io"
 
 local installcommands = {
     "sudo apt update && sudo apt upgrade -y",
-    "sudo apt install -y pptpd",
-    "sudo apt install -y strongswan xl2tpd",
+    "sudo apt install -y strongswan xl2tpd ppp lsof pptpd",
     "sudo sysctl -w net.ipv4.ip_forward=1",
     "sudo sh -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'",
     "sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE",
@@ -23,6 +22,78 @@ local installcommands = {
     "sudo systemctl enable xl2tpd",
     "sudo systemctl enable strongswan"
 }
+
+-- IPSec configuration
+local ipsec_conf = [[
+config setup
+    charondebug="all"
+
+conn %default
+    keyexchange=ikev1
+    authby=secret
+    ike=aes256-sha1-modp1024
+    esp=aes256-sha1
+    keylife=8h
+    rekey=yes
+    left=%any
+    leftid=@vpnserver
+    leftfirewall=yes
+    right=%any
+    rightauth=psk
+    rightdns=8.8.8.8,8.8.4.4
+    auto=add
+
+conn L2TP-PSK
+    keyexchange=ikev1
+    leftsubnet=0.0.0.0/0
+    type=transport
+    authby=secret
+    auto=add
+]]
+
+-- L2TP configuration
+local xl2tpd_conf = [[
+[global]
+port = 1701
+
+[lns default]
+ip range = 10.0.0.10-10.0.0.100
+local ip = 10.0.0.1
+require chap = yes
+refuse pap = yes
+require authentication = yes
+name = L2TPServer
+ppp debug = yes
+pppoptfile = /etc/ppp/options.xl2tpd
+length bit = yes
+]]
+
+-- L2TP PPP options
+local options_xl2tpd = [[
+require-mschap-v2
+ms-dns 8.8.8.8
+ms-dns 8.8.4.4
+auth
+mtu 1200
+mru 1200
+lock
+noccp
+proxyarp
+debug
+]]
+
+-- PPTP configuration
+local pptpd_conf = [[
+localip 192.168.0.1
+remoteip 192.168.0.100-200
+]]
+
+-- PPTP PPP options
+local options_pptpd = [[
+ms-dns 8.8.8.8
+ms-dns 8.8.4.4
+]]
+
 local CandyPanel = {}
 CandyPanel.__index = CandyPanel
 
@@ -35,7 +106,7 @@ end
 function CandyPanel:_reloadVPN()
     print("Reloading VPN services...")
     local success, err = pcall(function()
-        local result = os.execute("sudo systemctl restart pptpd && sudo systemctl restart xl2tpd")
+        local result = os.execute("sudo systemctl restart pptpd && sudo systemctl restart xl2tpd && sudo systemctl restart strongswan")
         if result ~= 0 then
             error("Failed to reload VPN services")
         end
@@ -87,6 +158,27 @@ function CandyPanel:InstallCandyPanel()
                 error("Command failed: " .. cmd)
             end
         end
+
+        -- Write configuration files
+        local function writeFile(path, content)
+            local f = io.open(path, "w")
+            if not f then error("Cannot open " .. path) end
+            f:write(content)
+            f:close()
+        end
+
+        writeFile("/etc/ipsec.conf", ipsec_conf)
+        writeFile("/etc/xl2tpd/xl2tpd.conf", xl2tpd_conf)
+        writeFile("/etc/ppp/options.xl2tpd", options_xl2tpd)
+        writeFile("/etc/pptpd.conf", pptpd_conf)
+        writeFile("/etc/ppp/options.pptpd", options_pptpd)
+        
+        -- Add a default pre-shared key for IPSec
+        local psk_file = io.open("/etc/ipsec.secrets", "w")
+        if not psk_file then error("Cannot open /etc/ipsec.secrets") end
+        psk_file:write(': PSK "YourStrongPreSharedKey"\n')
+        psk_file:close()
+
     end)
     if not success then
         print("Installation failed: " .. err)
@@ -142,16 +234,18 @@ function CandyPanel:newUser(username, password, traffic, expire)
     end
 
     local file = "/etc/ppp/chap-secrets"
-    local entry = string.format("%s\t*\t%s\t*\n", username, password)
+    local entry_l2tp = string.format("%s\tl2tpd\t%s\t*\n", username, password)
+    local entry_pptp = string.format("%s\tpptpd\t%s\t*\n", username, password)
     local ok, eerr = pcall(function()
         local f = io.open(file, "a")
         if not f then error("Cannot open " .. file) end
-        f:write(entry)
+        f:write(entry_l2tp)
+        f:write(entry_pptp)
         f:close()
     end)
     if not ok then
-        print("Failed to add user to PPTP: " .. eerr)
-        return false, "Failed to add user to PPTP"
+        print("Failed to add user to chap-secrets: " .. eerr)
+        return false, "Failed to add user to chap-secrets"
     end
     self:_reloadVPN()
     return true, "User created successfully for DB, PPTP, and L2TP"
@@ -179,7 +273,8 @@ function CandyPanel:editUser(username, new_password, new_traffic, new_expire)
                 end
             end
             f:close()
-            table.insert(lines, string.format("%s\t*\t%s\t*\n", username, new_password))
+            table.insert(lines, string.format("%s\tl2tpd\t%s\t*\n", username, new_password))
+            table.insert(lines, string.format("%s\tpptpd\t%s\t*\n", username, new_password))
             f = io.open(file, "w")
             if f then
                 for _, line in ipairs(lines) do
@@ -189,8 +284,8 @@ function CandyPanel:editUser(username, new_password, new_traffic, new_expire)
             end
         end)
         if not ok then
-            print("Failed to edit user in PPTP: " .. eerr)
-            return false, "Failed to edit user in PPTP"
+            print("Failed to edit user in chap-secrets: " .. eerr)
+            return false, "Failed to edit user in chap-secrets"
         end
     end)
     if not success then
@@ -227,8 +322,8 @@ function CandyPanel:deleteUser(username)
             end
         end)
         if not ok then
-            print("Failed to delete user from PPTP: " .. eerr)
-            return false, "Failed to delete user from PPTP"
+            print("Failed to delete user from chap-secrets: " .. eerr)
+            return false, "Failed to delete user from chap-secrets"
         end
     end)
     if not success then

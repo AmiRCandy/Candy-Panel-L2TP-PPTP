@@ -100,7 +100,7 @@ update_panel() {
 
     echo -e "${GREEN}Copying updated files...${NC}"
     cp -r Backend/* "${WEB_ROOT}/backend/"
-    cp index.html "${WEB_ROOT}/frontend/"
+    cp Frontend/index.html "${WEB_ROOT}/frontend/"
 
     echo -e "${GREEN}Restarting Nginx and VPN services...${NC}"
     systemctl restart nginx
