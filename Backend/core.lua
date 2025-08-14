@@ -32,6 +32,21 @@ function CandyPanel:new()
     return self
 end
 
+function CandyPanel:_reloadVPN()
+    print("Reloading VPN services...")
+    local success, err = pcall(function()
+        local result = os.execute("sudo systemctl restart pptpd && sudo systemctl restart xl2tpd")
+        if result ~= 0 then
+            error("Failed to reload VPN services")
+        end
+    end)
+    if not success then
+        print("Failed to reload VPN services: " .. err)
+        return false, "Failed to reload VPN services"
+    end
+    return true, "VPN services reloaded successfully"
+end
+
 function CandyPanel:InstallCandyPanel()
     print("Starting installation of PPTP and L2TP VPN...")
     if not self.db:has('settings', { key = 'install', value = '0' }) then
@@ -84,4 +99,101 @@ function CandyPanel:changeSetting(key, value)
         return false, "Failed to change setting"
     end
     return true, "Setting changed successfully"
+end
+
+function CandyPanel:newUser(username, password, traffic, expire)
+    if not username or not password then
+        return false, "Username and password are required"
+    end
+
+    local success, err = pcall(function()
+        self.db:insert('users', { username = username, password = password, traffic = traffic, expire = expire })
+    end)
+    if not success then
+        print("Failed to create user in DB: " .. err)
+        return false, "Failed to create user in DB"
+    end
+
+    local file = "/etc/ppp/chap-secrets"
+    local entry = string.format("%s\t*\t%s\t*\n", username, password)
+    local ok, eerr = pcall(function()
+        local f = io.open(file, "a")
+        if not f then error("Cannot open " .. file) end
+        f:write(entry)
+        f:close()
+    end)
+    if not ok then
+        print("Failed to add user to PPTP: " .. eerr)
+        return false, "Failed to add user to PPTP"
+    end
+    self:_reloadVPN()
+    return true, "User created successfully for DB, PPTP, and L2TP"
+end
+
+function CandyPanel:editUser(username, new_password, new_traffic, new_expire)
+    if not username then
+        return false, "Username is required"
+    end
+    local success, err = pcall(function()
+        local user = self.db:get('users', { username = username })
+        if not user then
+            return false, "User not found"
+        end
+        self.db:query("UPDATE users SET password = ?, traffic = ?, expire = ? WHERE username = ?",
+            { new_password, new_traffic, new_expire, username })
+        local file = "/etc/ppp/chap-secrets"
+        local entry = string.format("%s\t*\t%s\t*\n", username, new_password)
+        local ok, eerr = pcall(function()
+            local f = io.open(file, "a")
+            if not f then error("Cannot open " .. file) end
+            f:write(entry)
+            f:close()
+        end)
+        if not ok then
+            print("Failed to add user to PPTP: " .. eerr)
+            return false, "Failed to add user to PPTP"
+        end
+    end)
+    if not success then
+        print("Failed to edit user: " .. err)
+        return false, "Failed to edit user"
+    end
+    self:_reloadVPN()
+    return true, "User edited successfully for DB, PPTP, and L2TP"
+end
+
+function CandyPanel:deleteUser(username)
+    if not username then
+        return false, "Username is required"
+    end
+    local success, err = pcall(function()
+        self.db:query("DELETE FROM users WHERE username = ?", { username })
+        local file = "/etc/ppp/chap-secrets"
+        local ok, eerr = pcall(function()
+            local f = io.open(file, "r")
+            if not f then error("Cannot open " .. file) end
+            local lines = {}
+            for line in f:lines() do
+                if not line:match("^" .. username .. "\t") then
+                    table.insert(lines, line)
+                end
+            end
+            f:close()
+            f = io.open(file, "w")
+            for _, line in ipairs(lines) do
+                f:write(line .. "\n")
+            end
+            f:close()
+        end)
+        if not ok then
+            print("Failed to delete user from PPTP: " .. eerr)
+            return false, "Failed to delete user from PPTP"
+        end
+    end)
+    if not success then
+        print("Failed to delete user: " .. err)
+        return false, "Failed to delete user"
+    end
+    self:_reloadVPN()
+    return true, "User deleted successfully from DB, PPTP, and L2TP"
 end

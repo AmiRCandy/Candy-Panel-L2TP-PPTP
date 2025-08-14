@@ -11,9 +11,9 @@ function DB:new(file)
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password TEXT,
-            traffic INTEGER DEFAULT 0,
+            traffic INTEGER NOT NULL,
             used_traffic INTEGER DEFAULT 0,
-            expire INTEGER DEFAULT 0,
+            expire INTEGER NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             status BOOLEAN DEFAULT TRUE
         )
