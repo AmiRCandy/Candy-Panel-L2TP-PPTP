@@ -12,7 +12,7 @@ if data then
         local password = data.password
         local traffic = data.traffic or 0
         local expire = data.expire or 0
-        local success, err = Candy:createUser(username, password, traffic, expire)
+        local success, err = Candy:newUser(username, password, traffic, expire)
         if success then
             ngx.say(cjson.encode({ message = "User created successfully", user = { username = username, traffic = traffic, expire = expire } }))
         else

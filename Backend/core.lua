@@ -53,7 +53,7 @@ function CandyPanel:_mapPPPs()
     for line in f:lines() do
         local iface, user = line:match("(%S+) connected to .- as (%S+)")
         if iface and user then
-            self.db:query("UPDATE users SET ppp_iface = ? WHERE username = ?", { iface, user })
+            self.db:query("UPDATE clients SET ppp_iface = ? WHERE username = ?", { iface, user })
         end
     end
 
@@ -99,7 +99,7 @@ end
 
 function CandyPanel:getDashboardData()
     local data = {
-        users = self.db:select('users'),
+        clients = self.db:select('clients'),
         settings = self.db:select('settings'),
         server_stats = {
             memory = {
@@ -134,7 +134,7 @@ function CandyPanel:newUser(username, password, traffic, expire)
     end
 
     local success, err = pcall(function()
-        self.db:insert('users', { username = username, password = password, traffic = traffic, expire = expire })
+        self.db:insert('clients', { username = username, password = password, traffic = traffic, expire = expire })
     end)
     if not success then
         print("Failed to create user in DB: " .. err)
@@ -162,23 +162,35 @@ function CandyPanel:editUser(username, new_password, new_traffic, new_expire)
         return false, "Username is required"
     end
     local success, err = pcall(function()
-        local user = self.db:get('users', { username = username })
+        local user = self.db:get('clients', { username = username })
         if not user then
             return false, "User not found"
         end
-        self.db:query("UPDATE users SET password = ?, traffic = ?, expire = ? WHERE username = ?",
+        self.db:query("UPDATE clients SET password = ?, traffic = ?, expire = ? WHERE username = ?",
             { new_password, new_traffic, new_expire, username })
         local file = "/etc/ppp/chap-secrets"
-        local entry = string.format("%s\t*\t%s\t*\n", username, new_password)
         local ok, eerr = pcall(function()
-            local f = io.open(file, "a")
+            local f = io.open(file, "r")
             if not f then error("Cannot open " .. file) end
-            f:write(entry)
+            local lines = {}
+            for line in f:lines() do
+                if not line:match("^" .. username .. "\t") then
+                    table.insert(lines, line)
+                end
+            end
             f:close()
+            table.insert(lines, string.format("%s\t*\t%s\t*\n", username, new_password))
+            f = io.open(file, "w")
+            if f then
+                for _, line in ipairs(lines) do
+                    f:write(line .. "\n")
+                end
+                f:close()
+            end
         end)
         if not ok then
-            print("Failed to add user to PPTP: " .. eerr)
-            return false, "Failed to add user to PPTP"
+            print("Failed to edit user in PPTP: " .. eerr)
+            return false, "Failed to edit user in PPTP"
         end
     end)
     if not success then
@@ -194,7 +206,7 @@ function CandyPanel:deleteUser(username)
         return false, "Username is required"
     end
     local success, err = pcall(function()
-        self.db:query("DELETE FROM users WHERE username = ?", { username })
+        self.db:query("DELETE FROM clients WHERE username = ?", { username })
         local file = "/etc/ppp/chap-secrets"
         local ok, eerr = pcall(function()
             local f = io.open(file, "r")
@@ -228,14 +240,14 @@ function CandyPanel:deleteUser(username)
 end
 
 function CandyPanel:sync()
-    local users = self.db:query("SELECT * FROM users")
+    local users = self.db:query("SELECT * FROM clients")
     for _, user in ipairs(users) do
         self:_mapPPPs()
         local iface_traffic = self:updateTraffic() or {}
         local iface = user.ppp_iface
         if iface and iface_traffic[iface] then
-            local total = iface_traffic[iface].rx + iface_traffic[iface].tx
-            self.db:query("UPDATE users SET traffic = ? WHERE username = ?", { total, user.username })
+            local total = (iface_traffic[iface].rx + iface_traffic[iface].tx) / (1024 * 1024)
+            self.db:query("UPDATE clients SET traffic = ? WHERE username = ?", { total, user.username })
         end
         if user.expire and os.time() > user.expire then
             self:deleteUser(user.username)

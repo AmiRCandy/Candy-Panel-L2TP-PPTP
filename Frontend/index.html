@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candy Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin-top: 50px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">🍬 Candy VPN Panel</h1>
+        
+        <div class="card">
+            <div class="card-header">
+                <h3>Server Status</h3>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <strong>CPU Usage:</strong> <span id="cpu-usage">Loading...</span>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Memory Usage:</strong> <span id="memory-usage">Loading...</span>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Network Traffic:</strong> <span id="network-traffic">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3>VPN Clients</h3>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#userModal" id="newUserBtn">Add New User</button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Traffic (MB)</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientsTableBody">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="userModal" tabindex="-1" aria-labelledby="userModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="userModalLabel">User Management</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="userForm">
+                        <input type="hidden" id="action">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="traffic" class="form-label">Traffic (MB)</label>
+                            <input type="number" class="form-control" id="traffic" value="0">
+                        </div>
+                        <div class="mb-3">
+                            <label for="expire" class="form-label">Expiration (Unix Timestamp)</label>
+                            <input type="number" class="form-control" id="expire" value="0">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save User</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const clientsTableBody = document.getElementById('clientsTableBody');
+        const userForm = document.getElementById('userForm');
+        const userModal = new bootstrap.Modal(document.getElementById('userModal'));
+        const userModalLabel = document.getElementById('userModalLabel');
+        const actionInput = document.getElementById('action');
+        
+        async function fetchDashboardData() {
+            try {
+                const response = await axios.get('/dashboard');
+                const data = response.data;
+                
+                // Update server stats
+                document.getElementById('cpu-usage').innerText = `${(100 - parseFloat(data.server_stats.cpu)).toFixed(2)}%`;
+                document.getElementById('memory-usage').innerText = `${data.server_stats.memory.used.toFixed(2)} / ${data.server_stats.memory.total.toFixed(2)} KB (${data.server_stats.memory.percent.toFixed(2)}%)`;
+                document.getElementById('network-traffic').innerText = `Download: ${(data.server_stats.network.download / 1024 / 1024).toFixed(2)} MB, Upload: ${(data.server_stats.network.upload / 1024 / 1024).toFixed(2)} MB`;
+
+                // Populate clients table
+                clientsTableBody.innerHTML = '';
+                data.clients.forEach(client => {
+                    const row = document.createElement('tr');
+                    const trafficInMB = (client.traffic / (1024 * 1024)).toFixed(2);
+                    const status = client.status ? 'Active' : 'Inactive';
+                    row.innerHTML = `
+                        <td>${client.username}</td>
+                        <td>${trafficInMB}</td>
+                        <td>${status}</td>
+                        <td>
+                            <button class="btn btn-sm btn-info edit-btn" data-username="${client.username}" data-password="${client.password}" data-traffic="${client.traffic}" data-expire="${client.expire}">Edit</button>
+                            <button class="btn btn-sm btn-danger delete-btn" data-username="${client.username}">Delete</button>
+                        </td>
+                    `;
+                    clientsTableBody.appendChild(row);
+                });
+
+                // Attach event listeners for edit and delete buttons
+                document.querySelectorAll('.edit-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const { username, password, traffic, expire } = e.target.dataset;
+                        document.getElementById('username').value = username;
+                        document.getElementById('password').value = password;
+                        document.getElementById('traffic').value = traffic;
+                        document.getElementById('expire').value = expire;
+                        userModalLabel.innerText = 'Edit User';
+                        actionInput.value = 'edit_user';
+                        userModal.show();
+                    });
+                });
+                
+                document.querySelectorAll('.delete-btn').forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const username = e.target.dataset.username;
+                        if (confirm(`Are you sure you want to delete user ${username}?`)) {
+                            try {
+                                await axios.post('/user', { action: 'delete_user', username });
+                                alert('User deleted successfully!');
+                                fetchDashboardData();
+                            } catch (error) {
+                                alert('Error deleting user');
+                                console.error(error);
+                            }
+                        }
+                    });
+                });
+
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error);
+            }
+        }
+
+        userForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const traffic = document.getElementById('traffic').value;
+            const expire = document.getElementById('expire').value;
+            const action = actionInput.value;
+            
+            try {
+                const response = await axios.post('/user', {
+                    action,
+                    username,
+                    password,
+                    traffic: parseInt(traffic),
+                    expire: parseInt(expire)
+                });
+                alert(response.data.message);
+                userModal.hide();
+                fetchDashboardData();
+            } catch (error) {
+                alert('Error processing request');
+                console.error(error);
+            }
+        });
+
+        document.getElementById('newUserBtn').addEventListener('click', () => {
+            userForm.reset();
+            userModalLabel.innerText = 'Add New User';
+            actionInput.value = 'new_user';
+        });
+
+        // Initial fetch
+        fetchDashboardData();
+        // Refresh data every 10 seconds
+        setInterval(fetchDashboardData, 10000);
+    </script>
+</body>
+</html>
