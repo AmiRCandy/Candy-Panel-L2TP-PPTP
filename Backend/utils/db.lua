@@ -15,7 +15,8 @@ function DB:new(file)
             used_traffic INTEGER DEFAULT 0,
             expire INTEGER NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            status BOOLEAN DEFAULT TRUE
+            status BOOLEAN DEFAULT TRUE,
+            ppp_iface TEXT DEFAULT 'NONE'
         )
     ]])
 

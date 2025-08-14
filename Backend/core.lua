@@ -46,6 +46,33 @@ function CandyPanel:_reloadVPN()
     end
     return true, "VPN services reloaded successfully"
 end
+function CandyPanel:_mapPPPs()
+    local f = io.open("/var/log/ppp.log", "r")
+    if not f then return end
+
+    for line in f:lines() do
+        local iface, user = line:match("(%S+) connected to .- as (%S+)")
+        if iface and user then
+            self.db:query("UPDATE users SET ppp_iface = ? WHERE username = ?", { iface, user })
+        end
+    end
+
+    f:close()
+end
+
+function CandyPanel:updateTraffic()
+    local f = io.open("/proc/net/dev", "r")
+    if not f then return false, "Cannot read /proc/net/dev" end
+    local iface_traffic = {}
+    for line in f:lines() do
+        local iface, rx, tx = line:match("(%S+):%s*(%d+)%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+(%d+)")
+        if iface and iface:match("^ppp") then
+            iface_traffic[iface] = { rx = tonumber(rx), tx = tonumber(tx) }
+        end
+    end
+    f:close()
+    return iface_traffic
+end
 
 function CandyPanel:InstallCandyPanel()
     print("Starting installation of PPTP and L2TP VPN...")
@@ -180,10 +207,12 @@ function CandyPanel:deleteUser(username)
             end
             f:close()
             f = io.open(file, "w")
-            for _, line in ipairs(lines) do
-                f:write(line .. "\n")
+            if f then
+                for _, line in ipairs(lines) do
+                    f:write(line .. "\n")
+                end
+                f:close()
             end
-            f:close()
         end)
         if not ok then
             print("Failed to delete user from PPTP: " .. eerr)
@@ -196,4 +225,21 @@ function CandyPanel:deleteUser(username)
     end
     self:_reloadVPN()
     return true, "User deleted successfully from DB, PPTP, and L2TP"
+end
+
+function CandyPanel:sync()
+    local users = self.db:query("SELECT * FROM users")
+    for _, user in ipairs(users) do
+        self:_mapPPPs()
+        local iface_traffic = self:updateTraffic() or {}
+        local iface = user.ppp_iface
+        if iface and iface_traffic[iface] then
+            local total = iface_traffic[iface].rx + iface_traffic[iface].tx
+            self.db:query("UPDATE users SET traffic = ? WHERE username = ?", { total, user.username })
+        end
+        if user.expire and os.time() > user.expire then
+            self:deleteUser(user.username)
+        end
+    end
+    return true, "All users synchronized successfully"
 end
