@@ -3,5 +3,9 @@ local core = require "core"
 
 local Candy = core.CandyPanel:new()
 ngx.header.content_type = "application/json"
-local msg , data = Candy:InstallCandyPanel()
-ngx.say(cjson.encode({ message = msg, data = data }))
+ngx.req.read_body()
+local body = ngx.req.get_body_data()
+local data = cjson.decode(body)
+local psk = data.psk
+local success, msg = Candy:InstallCandyPanel(psk)
+ngx.say(cjson.encode({ success = success, message = msg }))

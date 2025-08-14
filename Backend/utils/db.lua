@@ -30,6 +30,7 @@ function DB:new(file)
         self:insert('settings', { key = 'status', value = '1' })
         self:insert('settings', { key = 'custom_endpoint', value = '192.168.1.1' })
         self:insert('settings', { key = 'install', value = '0' })
+        self:insert('settings', { key = 'l2tp_psk', value = '0' })
     end
     return self
 end

@@ -145,7 +145,7 @@ function CandyPanel:updateTraffic()
     return iface_traffic
 end
 
-function CandyPanel:InstallCandyPanel()
+function CandyPanel:InstallCandyPanel(psk)
     print("Starting installation of PPTP and L2TP VPN...")
     if not self.db:has('settings', { key = 'install', value = '0' }) then
         print("Candy Panel is already installed.")
@@ -159,7 +159,6 @@ function CandyPanel:InstallCandyPanel()
             end
         end
 
-        -- Write configuration files
         local function writeFile(path, content)
             local f = io.open(path, "w")
             if not f then error("Cannot open " .. path) end
@@ -172,11 +171,10 @@ function CandyPanel:InstallCandyPanel()
         writeFile("/etc/ppp/options.xl2tpd", options_xl2tpd)
         writeFile("/etc/pptpd.conf", pptpd_conf)
         writeFile("/etc/ppp/options.pptpd", options_pptpd)
-        
-        -- Add a default pre-shared key for IPSec
+
         local psk_file = io.open("/etc/ipsec.secrets", "w")
         if not psk_file then error("Cannot open /etc/ipsec.secrets") end
-        psk_file:write(': PSK "YourStrongPreSharedKey"\n')
+        psk_file:write(': PSK "' .. psk .. '"\n')
         psk_file:close()
 
     end)
@@ -185,6 +183,7 @@ function CandyPanel:InstallCandyPanel()
         return false, "Installation failed"
     end
     self.db:query("UPDATE settings SET value = '1' WHERE key = 'install'")
+    self.db:query("UPDATE settings SET value = '" .. psk .. "' WHERE key = 'l2tp_psk'")
     print("Installation finished. PPTP and L2TP/IPsec servers are installed.")
     return true , "Installation successful"
 end
