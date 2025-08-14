@@ -5,7 +5,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-REPO_URL="https://github.com/your-username/Candy-Panel-L2TP-PPTP.git"
+REPO_URL="https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP.git"
 PROJECT_DIR="Candy-Panel-L2TP-PPTP"
 WEB_ROOT="/var/www/candy-panel"
 
