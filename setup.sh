@@ -10,10 +10,10 @@ NC='\033[0m'
 REPO_URL="https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP.git"
 PROJECT_DIR="Candy-Panel-L2TP-PPTP"
 WEB_ROOT="/var/www/candy-panel"
-NGINX_SITES_AVAILABLE="/etc/nginx/sites-available"
-NGINX_SITES_ENABLED="/etc/nginx/sites-enabled"
 SYNC_WORKER_PATH="/usr/local/bin/sync_worker.lua"
-NGINX_CONF_PATH="/etc/nginx/sites-available/candy-panel.conf"
+SERVICE_NAME="candy-panel.service"
+SERVICE_PATH="/etc/systemd/system/${SERVICE_NAME}"
+LUA_BIN_PATH=$(which lua)
 
 # Check for root privileges
 if [[ $EUID -ne 0 ]]; then
@@ -39,17 +39,20 @@ check_and_install_dependencies() {
     apt update
     check_and_install_package "git"
     check_and_install_package "dialog"
-    check_and_install_package "nginx"
     check_and_install_package "lua5.3"
     check_and_install_package "sqlite3"
-    check_and_install_package "lua-cjson"
-    check_and_install_package "lua-sql-sqlite3" # This might be named differently on some systems
     check_and_install_package "strongswan"
     check_and_install_package "xl2tpd"
     check_and_install_package "pptpd"
     check_and_install_package "iptables"
     check_and_install_package "ufw"
-    check_and_install_package "libstrongswan-extra-plugins" # This might be named differently
+    check_and_install_package "libstrongswan-extra-plugins"
+    check_and_install_package "luarocks"
+
+    echo -e "${GREEN}Installing Lua packages with Luarocks...${NC}"
+    luarocks install lapis || { echo -e "${RED}Failed to install lapis. Aborting.${NC}"; exit 1; }
+    luarocks install lua-cjson || { echo -e "${RED}Failed to install lua-cjson. Aborting.${NC}"; exit 1; }
+    luarocks install lsqlite3 || { echo -e "${RED}Failed to install lsqlite3. Aborting.${NC}"; exit 1; }
 }
 
 # Display the interactive menu
@@ -82,24 +85,39 @@ install_panel() {
     mkdir -p "${WEB_ROOT}/frontend"
     cp -r Backend/* "${WEB_ROOT}/backend/" || { echo -e "${RED}Failed to copy backend files. Exiting.${NC}"; exit 1; }
     cp Frontend/index.html "${WEB_ROOT}/frontend/" || { echo -e "${RED}Failed to copy frontend file. Exiting.${NC}"; exit 1; }
+    # Copy the new Lapis app file
+    cp app.lua "${WEB_ROOT}/backend/app.lua" || { echo -e "${RED}Failed to copy app.lua. Exiting.${NC}"; exit 1; }
     chmod -R 755 "${WEB_ROOT}"
-
-    # Configure Nginx
-    echo -e "${GREEN}Configuring Nginx...${NC}"
-    cp "${WEB_ROOT}/backend/conf/ngnix.conf" "$NGINX_CONF_PATH" || { echo -e "${RED}Failed to copy Nginx config file. Exiting.${NC}"; exit 1; }
-    ln -s "$NGINX_CONF_PATH" "$NGINX_SITES_ENABLED/candy-panel.conf" || { echo -e "${RED}Failed to create Nginx symlink. Exiting.${NC}"; exit 1; }
-    rm -f "$NGINX_SITES_ENABLED/default"
-    systemctl restart nginx || { echo -e "${RED}Failed to restart Nginx. Check its status with 'systemctl status nginx'.${NC}"; exit 1; }
 
     # Set up background sync task
     echo -e "${GREEN}Setting up the background sync task...${NC}"
-    if [ -f "sync_worker.lua" ]; then
-        cp sync_worker.lua "$SYNC_WORKER_PATH" || { echo -e "${RED}Failed to copy sync_worker.lua. Exiting.${NC}"; exit 1; }
+    if [ -f "${WEB_ROOT}/backend/sync_worker.lua" ]; then
+        cp "${WEB_ROOT}/backend/sync_worker.lua" "$SYNC_WORKER_PATH" || { echo -e "${RED}Failed to copy sync_worker.lua. Exiting.${NC}"; exit 1; }
         chmod +x "$SYNC_WORKER_PATH"
         (crontab -l 2>/dev/null; echo "* * * * * /usr/bin/lua $SYNC_WORKER_PATH >> /var/log/candy_sync.log 2>&1") | crontab -
     else
-        echo -e "${RED}Error: 'sync_worker.lua' not found in the cloned repository. Skipping cron job setup.${NC}"
+        echo -e "${RED}Error: 'sync_worker.lua' not found. Skipping cron job setup.${NC}"
     fi
+
+    # Create and enable the systemd service for Lapis
+    echo -e "${GREEN}Creating and enabling systemd service for Lapis...${NC}"
+    echo "[Unit]
+Description=Candy Panel Lapis Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${WEB_ROOT}/backend
+ExecStart=${LUA_BIN_PATH} ${WEB_ROOT}/backend/app.lua
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target" > "$SERVICE_PATH"
+    systemctl daemon-reload
+    systemctl enable "${SERVICE_NAME}"
+    systemctl start "${SERVICE_NAME}"
+    systemctl status "${SERVICE_NAME}"
 
     # Configure network forwarding and firewall
     echo -e "${GREEN}Configuring network forwarding and firewall rules...${NC}"
@@ -111,6 +129,7 @@ install_panel() {
     ufw allow 500/udp
     ufw allow 4500/udp
     ufw allow 1701/udp
+    ufw allow 8080/tcp # Allow traffic on Lapis default port
 
     # Enable and start VPN services
     echo -e "${GREEN}Enabling and starting VPN services...${NC}"
@@ -142,9 +161,10 @@ update_panel() {
     echo -e "${GREEN}Copying updated files...${NC}"
     cp -r Backend/* "${WEB_ROOT}/backend/"
     cp Frontend/index.html "${WEB_ROOT}/frontend/"
+    cp app.lua "${WEB_ROOT}/backend/app.lua"
 
-    echo -e "${GREEN}Restarting Nginx and VPN services...${NC}"
-    systemctl restart nginx || { echo -e "${RED}Failed to restart Nginx.${NC}"; }
+    echo -e "${GREEN}Restarting Lapis and VPN services...${NC}"
+    systemctl restart "${SERVICE_NAME}" || { echo -e "${RED}Failed to restart Lapis service.${NC}"; }
     systemctl restart pptpd || { echo -e "${RED}Failed to restart pptpd.${NC}"; }
     systemctl restart xl2tpd || { echo -e "${RED}Failed to restart xl2tpd.${NC}"; }
     systemctl restart strongswan || { echo -e "${RED}Failed to restart strongswan.${NC}"; }
@@ -163,18 +183,18 @@ uninstall_panel() {
         exit 1
     fi
 
-    echo -e "${RED}Stopping and disabling VPN services...${NC}"
-    systemctl stop pptpd strongswan xl2tpd nginx
-    systemctl disable pptpd strongswan xl2tpd nginx
+    echo -e "${RED}Stopping and disabling services...${NC}"
+    systemctl stop pptpd strongswan xl2tpd "${SERVICE_NAME}"
+    systemctl disable pptpd strongswan xl2tpd "${SERVICE_NAME}"
 
-    echo -e "${RED}Removing VPN packages...${NC}"
-    apt purge -y pptpd strongswan xl2tpd nginx git
+    echo -e "${RED}Removing VPN packages and Lapis...${NC}"
+    apt purge -y pptpd strongswan xl2tpd git luarocks
+    luarocks remove lapis
 
     echo -e "${RED}Removing project directory, database, and configuration files...${NC}"
     rm -rf "$WEB_ROOT"
     rm -f /etc/ppp/chap-secrets
-    rm -f "$NGINX_CONF_PATH"
-    rm -f "$NGINX_SITES_ENABLED/candy-panel.conf"
+    rm -f "$SERVICE_PATH"
     rm -f "$SYNC_WORKER_PATH"
 
     echo -e "${RED}Removing cron job...${NC}"
@@ -186,7 +206,7 @@ uninstall_panel() {
     ufw delete allow 500/udp
     ufw delete allow 4500/udp
     ufw delete allow 1701/udp
-    iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+    ufw delete allow 8080/tcp
 
     echo -e "${GREEN}Uninstallation completed.${NC}"
 }
