@@ -200,6 +200,7 @@ uninstall_panel() {
     rm -f /etc/ppp/chap-secrets
     rm -f "$SERVICE_PATH"
     rm -f "$SYNC_WORKER_PATH"
+    rm -rf "$PROJECT_DIR"
 
     echo -e "${RED}Removing cron job...${NC}"
     crontab -l | grep -v 'sync_worker.lua' | crontab -
