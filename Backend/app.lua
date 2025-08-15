@@ -1,6 +1,7 @@
 local lapis = require "lapis"
 local cjson = require "cjson"
 local core = require "core"
+local io = require "io"
 
 local app = lapis.Application()
 
@@ -25,7 +26,13 @@ local function handle_json_request(self, handler)
 end
 
 app:get("/", function(self)
-    return lapis.serve_static_file("frontend/index.html")
+    local f = io.open("../frontend/index.html", "r")
+    if not f then
+        return { status = 404, ["content-type"] = "text/plain", body = "File not found" }
+    end
+    local content = f:read("*a")
+    f:close()
+    return { ["content-type"] = "text/html", body = content }
 end)
 
 app:get("/dashboard", function(self)

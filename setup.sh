@@ -57,6 +57,7 @@ check_and_install_dependencies() {
     luarocks install lua-cjson || { echo -e "${RED}Failed to install lua-cjson. Aborting.${NC}"; exit 1; }
     luarocks install lsqlite3 || { echo -e "${RED}Failed to install lsqlite3. Aborting.${NC}"; exit 1; }
     luarocks install lua-resty-http || { echo -e "${RED}Failed to install lua-resty-http. Aborting.${NC}"; exit 1; }
+    luarocks install http || { echo -e "${RED}Failed to install http. Aborting.${NC}"; exit 1; }
 }
 
 # Display the interactive menu
@@ -113,7 +114,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=${WEB_ROOT}/backend
-ExecStart=${LUA_BIN_PATH} ${WEB_ROOT}/backend/app.lua
+ExecStart=/usr/local/bin/lapis server
 Restart=on-failure
 
 [Install]
