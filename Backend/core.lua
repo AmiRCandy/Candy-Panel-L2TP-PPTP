@@ -1,6 +1,5 @@
 local DB = require "utils.db"
 local cjson = require "cjson"
-local http = require "resty.http"
 local os = require "os"
 local io = require "io"
 

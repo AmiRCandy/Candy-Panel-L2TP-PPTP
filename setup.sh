@@ -56,6 +56,7 @@ check_and_install_dependencies() {
     luarocks install lapis || { echo -e "${RED}Failed to install lapis. Aborting.${NC}"; exit 1; }
     luarocks install lua-cjson || { echo -e "${RED}Failed to install lua-cjson. Aborting.${NC}"; exit 1; }
     luarocks install lsqlite3 || { echo -e "${RED}Failed to install lsqlite3. Aborting.${NC}"; exit 1; }
+    luarocks install lua-resty-http || { echo -e "${RED}Failed to install lua-resty-http. Aborting.${NC}"; exit 1; }
 }
 
 # Display the interactive menu
