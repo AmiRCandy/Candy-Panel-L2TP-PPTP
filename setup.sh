@@ -48,6 +48,9 @@ check_and_install_dependencies() {
     check_and_install_package "ufw"
     check_and_install_package "libstrongswan-extra-plugins"
     check_and_install_package "luarocks"
+    check_and_install_package "libssl-dev"
+    check_and_install_package "lua5.3-dev"
+    check_and_install_package "libsqlite3-dev"
 
     echo -e "${GREEN}Installing Lua packages with Luarocks...${NC}"
     luarocks install lapis || { echo -e "${RED}Failed to install lapis. Aborting.${NC}"; exit 1; }
@@ -86,7 +89,7 @@ install_panel() {
     cp -r Backend/* "${WEB_ROOT}/backend/" || { echo -e "${RED}Failed to copy backend files. Exiting.${NC}"; exit 1; }
     cp Frontend/index.html "${WEB_ROOT}/frontend/" || { echo -e "${RED}Failed to copy frontend file. Exiting.${NC}"; exit 1; }
     # Copy the new Lapis app file
-    cp app.lua "${WEB_ROOT}/backend/app.lua" || { echo -e "${RED}Failed to copy app.lua. Exiting.${NC}"; exit 1; }
+    cp Backend/app.lua "${WEB_ROOT}/backend/app.lua" || { echo -e "${RED}Failed to copy app.lua. Exiting.${NC}"; exit 1; }
     chmod -R 755 "${WEB_ROOT}"
 
     # Set up background sync task
