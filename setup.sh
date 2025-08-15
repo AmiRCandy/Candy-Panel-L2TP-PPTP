@@ -120,7 +120,6 @@ WantedBy=multi-user.target" > "$SERVICE_PATH"
     systemctl daemon-reload
     systemctl enable "${SERVICE_NAME}"
     systemctl start "${SERVICE_NAME}"
-    systemctl status "${SERVICE_NAME}"
 
     # Configure network forwarding and firewall
     echo -e "${GREEN}Configuring network forwarding and firewall rules...${NC}"
