@@ -165,7 +165,7 @@ update_panel() {
     echo -e "${GREEN}Copying updated files...${NC}"
     cp -r Backend/* "${WEB_ROOT}/backend/"
     cp Frontend/index.html "${WEB_ROOT}/frontend/"
-    cp app.lua "${WEB_ROOT}/backend/app.lua"
+    cp Backend/app.lua "${WEB_ROOT}/backend/app.lua"
 
     echo -e "${GREEN}Restarting Lapis and VPN services...${NC}"
     systemctl restart "${SERVICE_NAME}" || { echo -e "${RED}Failed to restart Lapis service.${NC}"; }

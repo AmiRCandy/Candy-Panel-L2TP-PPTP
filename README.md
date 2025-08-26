@@ -32,9 +32,7 @@ sudo bash -c "$(curl -fsSL https://raw.githubusercontent.com/AmiRCandy/Candy-Pan
   * **SQLite3** for the database.
   * **Git** for cloning the repository.
 
-### Frontend & Backend Setup
-
-The `setup.sh` script handles the full setup, including installing all dependencies and configuring Nginx. No manual steps are required for a quick start.
+-----
 
 ## 🏗️ Architecture
 
@@ -57,7 +55,7 @@ The `setup.sh` script handles the full setup, including installing all dependenc
 
 ### First Time Setup
 
-The `setup.sh` script will automatically install everything you need. Once complete, you can access the panel at `http://<Your-Server-IP>:3446`.
+The `setup.sh` script will automatically install everything you need. Once complete, you can access the panel at `http://<Your-Server-IP>:8080`.
 
 ### Managing Clients
 
@@ -82,7 +80,7 @@ You can view server stats like CPU, memory, and network usage directly from the 
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](https://www.google.com/search?q=CONTRIBUTING.md) for details.
+We welcome contributions! Please see our [Contributing Guidelines](https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/blob/main/CONTRIBUTING.md) for details.
 
 1.  Fork the repository.
 2.  Create a feature branch (`git checkout -b feature/your-feature`).
@@ -94,22 +92,22 @@ We welcome contributions! Please see our [Contributing Guidelines](https://www.g
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/blob/main/LICENSE) file for details.
 
 -----
 
 ## 📞 Support
 
   * 📧 **Email**: amirhosen.1385.cmo@gmail.com
-  * 🐛 **Issues**: [GitHub Issues](https://www.google.com/search?q=https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues)
+  * 🐛 **Issues**: [GitHub Issues](https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues)
 
 -----
 
 <div align="center">
 <p>Built with 💜 for L2TP/PPTP Enthusiasts</p>
 <p>
-<a href="[https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/stargazers](https://www.google.com/search?q=https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/stargazers)">⭐ Star us on GitHub</a> •
-<a href="[https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues](https://www.google.com/search?q=https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues)">🐛 Report Bug</a> •
-<a href="[https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues](https://www.google.com/search?q=https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues)">✨ Request Feature</a>
+<a href="https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/stargazers">⭐ Star us on GitHub</a> •
+<a href="https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues">🐛 Report Bug</a> •
+<a href="https://github.com/AmiRCandy/Candy-Panel-L2TP-PPTP/issues">✨ Request Feature</a>
 </p>
 </div>

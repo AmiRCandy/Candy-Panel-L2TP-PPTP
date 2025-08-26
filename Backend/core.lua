@@ -4,22 +4,22 @@ local os = require "os"
 local io = require "io"
 
 local installcommands = {
-    "sudo apt update && sudo apt upgrade -y",
-    "sudo apt install -y strongswan xl2tpd ppp lsof pptpd",
-    "sudo sysctl -w net.ipv4.ip_forward=1",
-    "sudo sh -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'",
-    "sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE",
-    "sudo ufw allow 1723/tcp",
-    "sudo ufw allow proto 47",
-    "sudo ufw allow 500/udp",
-    "sudo ufw allow 4500/udp",
-    "sudo ufw allow 1701/udp",
-    "sudo systemctl restart pptpd",
-    "sudo systemctl restart xl2tpd",
-    "sudo systemctl restart strongswan",
-    "sudo systemctl enable pptpd",
-    "sudo systemctl enable xl2tpd",
-    "sudo systemctl enable strongswan"
+    "apt update && apt upgrade -y",
+    "apt install -y strongswan xl2tpd ppp lsof pptpd",
+    "sysctl -w net.ipv4.ip_forward=1",
+    "echo 1 > /proc/sys/net/ipv4/ip_forward",
+    "iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE",
+    "ufw allow 1723/tcp",
+    "ufw allow proto 47",
+    "ufw allow 500/udp",
+    "ufw allow 4500/udp",
+    "ufw allow 1701/udp",
+    "systemctl restart pptpd",
+    "systemctl restart xl2tpd",
+    "systemctl restart strongswan",
+    "systemctl enable pptpd",
+    "systemctl enable xl2tpd",
+    "systemctl enable strongswan"
 }
 
 -- IPSec configuration
@@ -102,20 +102,44 @@ function CandyPanel:new()
     return self
 end
 
+-- Helper function to execute commands safely
+local function executeCommand(cmd)
+    print("Executing: " .. cmd)
+    local result = os.execute(cmd)
+    
+    -- Handle different Lua versions' os.execute return values
+    local success = false
+    if type(result) == "number" then
+        success = (result == 0)
+    elseif type(result) == "boolean" then
+        success = result
+    else
+        success = (result ~= nil)
+    end
+    
+    if not success then
+        error("Command failed: " .. cmd .. " (result: " .. tostring(result) .. ")")
+    end
+    
+    print("Success: " .. cmd)
+    return true
+end
+
 function CandyPanel:_reloadVPN()
     print("Reloading VPN services...")
     local success, err = pcall(function()
-        local result = os.execute("sudo systemctl restart pptpd && sudo systemctl restart xl2tpd && sudo systemctl restart strongswan")
-        if result ~= 0 then
-            error("Failed to reload VPN services")
-        end
+        executeCommand("systemctl restart pptpd")
+        executeCommand("systemctl restart xl2tpd") 
+        executeCommand("systemctl restart strongswan")
     end)
+    
     if not success then
         print("Failed to reload VPN services: " .. err)
         return false, "Failed to reload VPN services"
     end
     return true, "VPN services reloaded successfully"
 end
+
 function CandyPanel:_mapPPPs()
     local f = io.open("/var/log/ppp.log", "r")
     if not f then return end
@@ -150,12 +174,10 @@ function CandyPanel:InstallCandyPanel(psk)
         print("Candy Panel is already installed.")
         return false, "Candy Panel is already installed"
     end
+    
     local success, err = pcall(function()
         for _, cmd in ipairs(installcommands) do
-            local result = os.execute(cmd)
-            if result ~= 0 then
-                error("Command failed: " .. cmd)
-            end
+            executeCommand(cmd)
         end
 
         local function writeFile(path, content)
@@ -175,29 +197,41 @@ function CandyPanel:InstallCandyPanel(psk)
         if not psk_file then error("Cannot open /etc/ipsec.secrets") end
         psk_file:write(': PSK "' .. psk .. '"\n')
         psk_file:close()
-
     end)
+    
     if not success then
         print("Installation failed: " .. err)
-        return false, "Installation failed"
+        return false, "Installation failed: " .. err
     end
+    
     self.db:query("UPDATE settings SET value = '1' WHERE key = 'install'")
     self.db:query("UPDATE settings SET value = '" .. psk .. "' WHERE key = 'l2tp_psk'")
     print("Installation finished. PPTP and L2TP/IPsec servers are installed.")
-    return true , "Installation successful"
+    return true, "Installation successful"
 end
 
 function CandyPanel:getDashboardData()
+    -- Get memory info from /proc/meminfo
+    local meminfo = io.popen("cat /proc/meminfo"):read("*a")
+    local total_mem = tonumber(meminfo:match("MemTotal:%s*(%d+)")) or 0
+    local free_mem = tonumber(meminfo:match("MemFree:%s*(%d+)")) or 0
+    local used_mem = total_mem - free_mem
+    local mem_percent = total_mem > 0 and (used_mem / total_mem * 100) or 0
+    
+    -- Get CPU usage (idle percentage)
+    local cpu_idle = io.popen("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/'"):read("*n") or 100
+    local cpu_usage = 100 - cpu_idle
+    
     local data = {
         clients = self.db:select('clients'),
         settings = self.db:select('settings'),
         server_stats = {
             memory = {
-                total = collectgarbage("count"),
-                used = collectgarbage("count", "used"),
-                percent = collectgarbage("count") / collectgarbage("count", "total") * 100
+                total = total_mem,
+                used = used_mem,
+                percent = mem_percent
             },
-            cpu = os.execute("top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/'") or 0,
+            cpu = cpu_usage,
             network = {
                 download = io.popen("cat /proc/net/dev | grep eth0 | awk '{print $2}'"):read("*n") or 0,
                 upload = io.popen("cat /proc/net/dev | grep eth0 | awk '{print $10}'"):read("*n") or 0
@@ -232,13 +266,13 @@ function CandyPanel:newUser(username, password, traffic, expire)
     end
 
     local file = "/etc/ppp/chap-secrets"
-    local entry_l2tp = string.format("%s\tl2tpd\t%s\t*\n", username, password)
-    local entry_pptp = string.format("%s\tpptpd\t%s\t*\n", username, password)
+    local entry_l2tp = string.format("%s\tl2tpd\t%s\t*", username, password)
+    local entry_pptp = string.format("%s\tpptpd\t%s\t*", username, password)
     local ok, eerr = pcall(function()
         local f = io.open(file, "a")
         if not f then error("Cannot open " .. file) end
-        f:write(entry_l2tp)
-        f:write(entry_pptp)
+        f:write(entry_l2tp .. "\n")
+        f:write(entry_pptp .. "\n")
         f:close()
     end)
     if not ok then
@@ -253,13 +287,16 @@ function CandyPanel:editUser(username, new_password, new_traffic, new_expire)
     if not username then
         return false, "Username is required"
     end
+    
+    local user = self.db:get('clients', { username = username })
+    if not user then
+        return false, "User not found"
+    end
+    
     local success, err = pcall(function()
-        local user = self.db:get('clients', { username = username })
-        if not user then
-            return false, "User not found"
-        end
         self.db:query("UPDATE clients SET password = ?, traffic = ?, expire = ? WHERE username = ?",
             { new_password, new_traffic, new_expire, username })
+        
         local file = "/etc/ppp/chap-secrets"
         local ok, eerr = pcall(function()
             local f = io.open(file, "r")
@@ -271,8 +308,10 @@ function CandyPanel:editUser(username, new_password, new_traffic, new_expire)
                 end
             end
             f:close()
-            table.insert(lines, string.format("%s\tl2tpd\t%s\t*\n", username, new_password))
-            table.insert(lines, string.format("%s\tpptpd\t%s\t*\n", username, new_password))
+            
+            table.insert(lines, string.format("%s\tl2tpd\t%s\t*", username, new_password))
+            table.insert(lines, string.format("%s\tpptpd\t%s\t*", username, new_password))
+            
             f = io.open(file, "w")
             if f then
                 for _, line in ipairs(lines) do
@@ -282,14 +321,15 @@ function CandyPanel:editUser(username, new_password, new_traffic, new_expire)
             end
         end)
         if not ok then
-            print("Failed to edit user in chap-secrets: " .. eerr)
-            return false, "Failed to edit user in chap-secrets"
+            error("Failed to edit user in chap-secrets: " .. eerr)
         end
     end)
+    
     if not success then
         print("Failed to edit user: " .. err)
         return false, "Failed to edit user"
     end
+    
     self:_reloadVPN()
     return true, "User edited successfully for DB, PPTP, and L2TP"
 end
@@ -348,3 +388,5 @@ function CandyPanel:sync()
     end
     return true, "All users synchronized successfully"
 end
+
+return { CandyPanel = CandyPanel }

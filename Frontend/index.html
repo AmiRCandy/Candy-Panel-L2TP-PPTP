@@ -154,7 +154,7 @@
                 const data = response.data;
                 
                 // Update server stats
-                document.getElementById('cpu-usage').innerText = `${(100 - parseFloat(data.server_stats.cpu)).toFixed(2)}%`;
+                document.getElementById('cpu-usage').innerText = `${parseFloat(data.server_stats.cpu).toFixed(2)}%`;
                 document.getElementById('memory-usage').innerText = `${data.server_stats.memory.used.toFixed(2)} / ${data.server_stats.memory.total.toFixed(2)} KB (${data.server_stats.memory.percent.toFixed(2)}%)`;
                 document.getElementById('network-traffic').innerText = `Download: ${(data.server_stats.network.download / 1024 / 1024).toFixed(2)} MB, Upload: ${(data.server_stats.network.upload / 1024 / 1024).toFixed(2)} MB`;
 
